@@ -1,27 +1,33 @@
 {
-  "name": "rollup-plugin-polyfill-inject",
-  "version": "0.0.0",
-  "description": "auto inject polyfill",
-  "main": "index.js",
-  "dependencies": {
-    "@rollup/pluginutils": "^3.0.4",
-    "estree-walker": "^1.0.1",
-    "magic-string": "^0.25.5"
-  },
-  "devDependencies": {
-    "@rollup/plugin-commonjs": "^16.0.0",
-    "@rollup/plugin-inject": "^4.0.2",
-    "@rollup/plugin-node-resolve": "^10.0.0",
-    "core-js": "^3.7.0"
-  },
-  "scripts": {
-    "test": "npx rollup -c"
-  },
-  "keywords": [
-    "rollup",
-    "polyfill",
-    "shim"
-  ],
-  "author": "linsk",
-  "license": "MIT"
+	"name": "rollup-plugin-polyfill-inject",
+	"version": "1.0.0",
+	"description": "auto inject polyfill",
+	"main": "index.js",
+	"dependencies": {
+		"@rollup/pluginutils": "^3.0.4",
+		"estree-walker": "^1.0.1",
+		"magic-string": "^0.25.5"
+	},
+	"devDependencies": {
+		"@rollup/plugin-commonjs": "^16.0.0",
+		"@rollup/plugin-inject": "^4.0.2",
+		"@rollup/plugin-node-resolve": "^10.0.0",
+		"core-js": "^3.7.0"
+	},
+	"scripts": {
+		"test": "npx rollup -c"
+	},
+	"keywords": [
+		"rollup",
+		"polyfill",
+		"shim",
+		"useBuiltIns",
+		"usage"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/linsk1998/rollup-plugin-polyfill-inject.git"
+	},
+	"author": "linsk",
+	"license": "MIT"
 }

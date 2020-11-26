@@ -5,9 +5,9 @@ auto inject polyfill
 ## Config
 
 ```javascript
-var polyfill = require("rollup-plugin-polyfill-inject");
-var commonjs = require("@rollup/plugin-commonjs");
-var {nodeResolve} =require("@rollup/plugin-node-resolve");
+import polyfill from "rollup-plugin-polyfill-inject";
+import commonjs from "@rollup/plugin-commonjs";
+import nodeResolve from "@rollup/plugin-node-resolve";
 export default {
 	input: "./src/demo.js",
 	output: {
@@ -60,9 +60,9 @@ var map=new Map();
 ## core-js Config
 
 ```javascript
-var polyfill = require("rollup-plugin-polyfill-inject");
-var commonjs = require("@rollup/plugin-commonjs");
-var {nodeResolve} =require("@rollup/plugin-node-resolve");
+import polyfill from "rollup-plugin-polyfill-inject";
+import commonjs from "@rollup/plugin-commonjs";
+import nodeResolve from "@rollup/plugin-node-resolve";
 export default {
 	input: "./src/demo.js",
 	output: {
