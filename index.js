@@ -21,6 +21,9 @@ var isReference = function (node, parent) {
 		// disregard the `bar` in `export { foo as bar }`
 		if (parent.type === 'ExportSpecifier' && node !== parent.local) { return false; }
 
+		// disregard the `bar` in `import { bar as foo }`
+		if (parent.type === 'ImportSpecifier' && node === parent.imported) { return false; }
+
 		return true;
 	}
 
@@ -50,17 +53,22 @@ function polyfill(options) {
 
 	var coreJsConfig=options['core-js'];
 	if(coreJsConfig){
-		require("./build/corejs")(coreJsConfig,membersMap,modulesMap);
+		require("./build/core-js")(coreJsConfig,membersMap,modulesMap);
 	}
-
-	Object.entries(modules).forEach(function([key,value]){
-		//console.log(key);
-		if(key.startsWith(".")){
-			membersMap.set(key,value);
-		}else{
-			modulesMap.set(key,value);
-		}
-	})
+	var skyCoreConfig=options['sky-core'];
+	if(skyCoreConfig){
+		require("./build/sky-core")(skyCoreConfig,membersMap,modulesMap);
+	}
+	if(modules){
+		Object.entries(modules).forEach(function([key,value]){
+			//console.log(key);
+			if(key.startsWith(".")){
+				membersMap.set(key,value);
+			}else{
+				modulesMap.set(key,value);
+			}
+		})
+	}
 
 	var sourceMap = options.sourceMap !== false && options.sourcemap !== false;
 	return {
@@ -150,6 +158,11 @@ function polyfill(options) {
 						var ref = node.key;
 						var name = ref.name;
 						handleReference(node, name, name);
+						this.skip();
+						return;
+					}
+					if (node.type === 'ImportExpression') {
+						handleReference(node, "import", "import");
 						this.skip();
 						return;
 					}
