@@ -128,16 +128,17 @@ function polyfill(options) {
 			
 				if(parts.length){
 					var keypath="."+parts.join(".");
-					var mod = membersMap.get(keypath);
-					if(mod){
-						if (Array.isArray(mod)) {
-							mod.forEach(function (mod) {
+					membersMap.forEach(function(mod, key) {
+						if(keypath.endsWith(key)) {
+							if(Array.isArray(mod)) {
+								mod.forEach(function(mod) {
+									newImports.add(mod);
+								});
+							} else {
 								newImports.add(mod);
-							});
-						} else {
-							newImports.add(mod);
+							}
 						}
-					}
+					});
 				}
 			}
 
