@@ -103,17 +103,6 @@ function polyfill(options) {
 			var newImports = new Set();
 
 			function handleReference(node, name, keypath) {
-				membersMap.forEach(function(mod, key) {
-					if(keypath.endsWith(key)) {
-						if(Array.isArray(mod)) {
-							mod.forEach(function(mod) {
-								newImports.add(mod);
-							});
-						} else {
-							newImports.add(mod);
-						}
-					}
-				});
 				modulesMap.forEach(function(mod, path) {
 					if(mod && !imports.has(name) && !scope.contains(name)) {
 						if(path === keypath && !scope.contains(name)) {
@@ -129,6 +118,30 @@ function polyfill(options) {
 				});
 				return false;
 			}
+			function handleMember(startNode) {
+				var parts = [];
+				var node = startNode;
+
+				while(node.type === 'MemberExpression') {
+					parts.unshift(node.property.name);
+					node = node.object;
+				}
+
+				if(parts.length) {
+					var keypath = "." + parts.join(".");
+					membersMap.forEach(function(mod, key) {
+						if(keypath.endsWith(key)) {
+							if(Array.isArray(mod)) {
+								mod.forEach(function(mod) {
+									newImports.add(mod);
+								});
+							} else {
+								newImports.add(mod);
+							}
+						}
+					});
+				}
+			}
 
 			estreeWalker.walk(ast, {
 				enter: function enter(node, parent) {
@@ -140,6 +153,7 @@ function polyfill(options) {
 					if(node.scope) {
 						scope = node.scope; // eslint-disable-line prefer-destructuring
 					}
+					handleMember(node);
 					// special case – shorthand properties. because node.key === node.value,
 					// we can't differentiate once we've descended into the node
 					if(node.type === 'Property' && node.shorthand) {
