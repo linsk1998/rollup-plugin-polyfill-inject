@@ -1,6 +1,6 @@
 {
 	"name": "rollup-plugin-polyfill-inject",
-	"version": "1.0.3",
+	"version": "1.0.5",
 	"description": "auto inject polyfill",
 	"main": "index.js",
 	"dependencies": {
