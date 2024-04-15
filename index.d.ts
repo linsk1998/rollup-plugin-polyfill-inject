@@ -14,7 +14,7 @@ interface PolyfillOptions {
 			"DOM" | "DOM.Iterable" | "ES6"
 		>;
 	},
-	modules?: Record<string, string>,
+	modules?: Record<string, string | string[]>,
 	include?: Array<string | RegExp> | string | RegExp;
 	exclude?: Array<string | RegExp> | string | RegExp;
 }
