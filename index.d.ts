@@ -15,10 +15,12 @@ interface PolyfillOptions {
 		>;
 	},
 	modules?: Record<string, string | string[]>,
+	filter?: (id: string) => boolean;
 	include?: Array<string | RegExp> | string | RegExp;
 	exclude?: Array<string | RegExp> | string | RegExp;
+	sourceMap?: boolean
 }
 declare module "rollup-plugin-polyfill-inject" {
-	var exports:(options: PolyfillOptions)=> any
+	var exports: (options: PolyfillOptions) => any
 	export = exports;
 }
