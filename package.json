@@ -1,21 +1,22 @@
 {
 	"name": "rollup-plugin-polyfill-inject",
-	"version": "2.0.1",
+	"version": "3.0.0",
 	"description": "auto inject polyfill",
 	"main": "index.js",
 	"dependencies": {
 		"@rollup/pluginutils": "^4.1.1",
-		"estree-walker": "^1.0.1",
+		"estree-walker": "^2.0.0",
 		"magic-string": "^0.25.5"
 	},
 	"devDependencies": {
-		"@rollup/plugin-commonjs": "^16.0.0",
-		"@rollup/plugin-inject": "^4.0.2",
-		"@rollup/plugin-node-resolve": "^10.0.0",
-		"core-js": "^3.7.0"
+		"@rollup/plugin-commonjs": "^28.0.2",
+		"@types/jest": "^29.5.14",
+		"core-js": "^3.7.0",
+		"jest": "^29.7.0",
+		"rollup": "^3.0.0"
 	},
 	"scripts": {
-		"test": "npx rollup -c"
+		"test": "jest tests/spec.test.js"
 	},
 	"keywords": [
 		"rollup",

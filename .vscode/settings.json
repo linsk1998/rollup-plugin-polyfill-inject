@@ -1,6 +1,14 @@
 {
-	"editor.renderControlCharacters": true,
+	"editor.formatOnType": true,
+	"editor.formatOnSave": true,
+	"editor.formatOnPaste": true,
 	"editor.insertSpaces": false,
-	"editor.tabSize": 4,
-	"editor.renderWhitespace": "all"
+	"javascript.format.semicolons": "insert",
+	"javascript.format.insertSpaceAfterFunctionKeywordForAnonymousFunctions": false,
+	"javascript.format.insertSpaceAfterKeywordsInControlFlowStatements": false,
+	"typescript.format.semicolons": "insert",
+	"typescript.format.insertSpaceAfterFunctionKeywordForAnonymousFunctions": false,
+	"typescript.format.insertSpaceAfterKeywordsInControlFlowStatements": false,
+	"editor.renderWhitespace": "all",
+	"editor.wordWrap": "on"
 }
