@@ -2,6 +2,7 @@
 const estreeWalker = require('estree-walker');
 const MagicString = require('magic-string');
 const pluginutils = require('@rollup/pluginutils');
+const pascalcase = require('pascalcase');
 
 const isReference = function(node, parent) {
 	if(node.type === 'MemberExpression') {
@@ -42,7 +43,11 @@ const flatten = function(startNode) {
 	var name = node.name;
 	parts.unshift(name);
 
-	return { name: name, keypath: parts.join('.') };
+	return {
+		name: name,
+		property: parts.at(-1),
+		keypath: parts.join('.')
+	};
 };
 
 function polyfill(options) {
@@ -80,6 +85,7 @@ function polyfill(options) {
 			var oldImports = new Set();
 			var pureImports = new Map();
 			var getterImports = new Map();
+			var setterImports = new Map();
 			var imports = new Set();
 			ast.body.forEach(function(node) {
 				if(node.type === 'ImportDeclaration') {
@@ -93,31 +99,47 @@ function polyfill(options) {
 			// analyse scopes
 			var scope = pluginutils.attachScopes(ast, 'scope');
 			var magicString = new MagicString(code);
-			var changed = false;
+			var modified = false;
 			var scopeIndex = 0;
 
-			function handleReference(node, name, keypath) {
+			function prependModule(scopeName, mod) {
+				if(Array.isArray(mod)) {
+					let [source, imported] = mod;
+					if(imported === scopeName) {
+						magicString.appendLeft(0, `import { ${scopeName} } from ${JSON.stringify(source)};\n`);
+					} else {
+						magicString.appendLeft(0, `import { ${imported} as ${scopeName} } from ${JSON.stringify(source)};\n`);
+					}
+				} else {
+					magicString.appendLeft(0, `import ${scopeName} from ${JSON.stringify(mod)};\n`);
+				}
+			}
+			function generateUidIdentifier(scope, name) {
+				let baseName = pluginutils.makeLegalIdentifier(name);
+				scopeName = baseName;
+				while(imports.has(scopeName) || scope.contains(scopeName)) {
+					scopeName = `${baseName}${scopeIndex}`;
+					scopeIndex++;
+				}
+				return scopeName;
+			}
+			function handleReference(node, name, keypath, property) {
 				if(!imports.has(name) && !scope.contains(name)) {
 					{
 						let mod = getter[keypath];
 						if(mod) {
 							let scopeName = getterImports.get(keypath);
 							if(!scopeName) {
-								let baseName = pluginutils.makeLegalIdentifier(`get_${keypath}`);
-								scopeName = baseName;
-								while(imports.has(scopeName) || scope.contains(scopeName)) {
-									scopeName = `${baseName}${scopeIndex}`;
-									scopeIndex++;
-								}
+								scopeName = generateUidIdentifier(scope, `get${pascalcase(property)}`);
 								getterImports.set(keypath, scopeName);
 							}
-							if(Array.isArray(mod)) {
-								magicString.appendLeft(0, `import { ${mod[1]} as ${scopeName} } from ${JSON.stringify(mod[0])};\n`);
+							prependModule(scopeName, mod);
+							if(node.type === 'Property') {
+								magicString.appendRight(node.end, ': ' + scopeName + '()');
 							} else {
-								magicString.appendLeft(0, `import ${scopeName} from ${JSON.stringify(mod)};\n`);
+								magicString.overwrite(node.start, node.end, scopeName + '()');
 							}
-							magicString.overwrite(node.start, node.end, scopeName + '()', { storeName: true });
-							changed = true;
+							modified = true;
 							return true;
 						}
 					}
@@ -127,26 +149,17 @@ function polyfill(options) {
 							let scopeName = pureImports.get(keypath);
 							if(!scopeName) {
 								if(name !== keypath || name == 'import') {
-									let baseName = pluginutils.makeLegalIdentifier(keypath);
-									scopeName = baseName;
-									while(imports.has(scopeName) || scope.contains(scopeName)) {
-										scopeName = `${baseName}${scopeIndex}`;
-										scopeIndex++;
-									}
+									scopeName = generateUidIdentifier(scope, property);
 								} else {
 									scopeName = name;
 								}
-								if(Array.isArray(mod)) {
-									magicString.appendLeft(0, `import { ${mod[1]} as ${scopeName} } from ${JSON.stringify(mod[0])};\n`);
-								} else {
-									magicString.appendLeft(0, `import ${scopeName} from ${JSON.stringify(mod)};\n`);
-								}
+								prependModule(scopeName, mod);
 								pureImports.set(keypath, scopeName);
 							}
 							if(name !== keypath) {
 								magicString.overwrite(node.start, node.end, scopeName, { storeName: true });
 							}
-							changed = true;
+							modified = true;
 							return true;
 						}
 					}
@@ -160,7 +173,7 @@ function polyfill(options) {
 									newImports.add(mod);
 								}
 							});
-							changed = true;
+							modified = true;
 							return true;
 						}
 					}
@@ -174,22 +187,13 @@ function polyfill(options) {
 					if(mod) {
 						let scopeName = getterImports.get(key);
 						if(!scopeName) {
-							let baseName = pluginutils.makeLegalIdentifier(`get_${name}`);
-							scopeName = baseName;
-							while(imports.has(scopeName) || scope.contains(scopeName)) {
-								scopeName = `${baseName}${scopeIndex}`;
-								scopeIndex++;
-							}
-							if(Array.isArray(mod)) {
-								magicString.appendLeft(0, `import { ${mod[1]} as ${scopeName} } from ${JSON.stringify(mod[0])};\n`);
-							} else {
-								magicString.appendLeft(0, `import ${scopeName} from ${JSON.stringify(mod)};\n`);
-							}
+							scopeName = generateUidIdentifier(scope, `get${pascalcase(name)}`);
+							prependModule(scopeName, mod);
 							getterImports.set(key, scopeName);
 						}
 						magicString.appendRight(member.start, `${scopeName}(`);
-						magicString.overwrite(member.object.end, member.end, ")", { storeName: true });
-						changed = true;
+						magicString.overwrite(member.object.end, member.end, ")");
+						modified = true;
 						return true;
 					}
 				}
@@ -203,42 +207,60 @@ function polyfill(options) {
 								newImports.add(mod);
 							}
 						});
-						changed = true;
+						modified = true;
 						return true;
 					}
 				}
 				return false;
 			}
-			function handleMethod(node, callee, property, name) {
+			function handleMethod(node, callee, name) {
 				let key = '.' + name;
 				let mod = pure[key];
 				if(mod) {
 					let scopeName = pureImports.get(key);
 					if(!scopeName) {
-						let baseName = pluginutils.makeLegalIdentifier(name);
-						scopeName = baseName;
-						while(imports.has(scopeName) || scope.contains(scopeName)) {
-							scopeName = `${baseName}${scopeIndex}`;
-							scopeIndex++;
-						}
-						if(Array.isArray(mod)) {
-							magicString.appendLeft(0, `import { ${mod[1]} as ${scopeName} } from ${JSON.stringify(mod[0])};\n`);
-						} else {
-							magicString.appendLeft(0, `import ${scopeName} from ${JSON.stringify(mod)};\n`);
-						}
+						scopeName = generateUidIdentifier(scope, name);
+						prependModule(scopeName, mod);
 						pureImports.set(key, scopeName);
 					}
 					magicString.appendRight(node.start, `${scopeName}(`);
 					let args = node.arguments;
 					if(args.length) {
-						magicString.overwrite(callee.object.end, args[0].start, ", ", { storeName: true });
+						magicString.overwrite(callee.object.end, args[0].start, ", ");
 					} else {
-						magicString.overwrite(callee.object.end, node.end, ")", { storeName: true });
+						magicString.overwrite(callee.object.end, node.end, ")");
 					}
-					changed = true;
+					modified = true;
 					return true;
 				}
 				return false;
+			}
+			function handleSetter(node, name, keypath, property) {
+				let mod = setter[keypath];
+				if(mod) {
+					let scopeName = setterImports.get(keypath);
+					if(!scopeName) {
+						scopeName = generateUidIdentifier(scope, `set${pascalcase(property)}`);
+						prependModule(scopeName, mod);
+						setterImports.set(keypath, scopeName);
+					}
+					modified = true;
+					return scopeName;
+				}
+			}
+			function handleSetter2(node, property) {
+				let keypath = '.' + property;
+				let mod = setter[keypath];
+				if(mod) {
+					let scopeName = setterImports.get(keypath);
+					if(!scopeName) {
+						scopeName = generateUidIdentifier(scope, `set${pascalcase(property)}`);
+						prependModule(scopeName, mod);
+						setterImports.set(keypath, scopeName);
+					}
+					modified = true;
+					return scopeName;
+				}
 			}
 
 			estreeWalker.walk(ast, {
@@ -252,25 +274,37 @@ function polyfill(options) {
 						scope = node.scope; // eslint-disable-line prefer-destructuring
 					}
 					if(node.type === 'ImportExpression') {
-						handleReference(node, "import", "import");
+						handleReference(node, 'import', 'import', 'dynamicImport');
 						this.skip();
 						return;
 					}
 					// special case – shorthand properties. because node.key === node.value,
 					// we can't differentiate once we've descended into the node
 					if(node.type === 'Property' && node.shorthand) {
-						var ref = node.key;
-						var name = ref.name;
-						handleReference(node, name, name);
+						let ref = node.key;
+						let name = ref.name;
+						handleReference(node, name, name, name);
 						this.skip();
 						return;
 					}
 					if(isReference(node, parent)) {
-						var { name, keypath } = flatten(node);
-						var handled = handleReference(node, name, keypath);
-						if(handled) {
-							this.skip();
-							return;
+						let { name, keypath, property } = flatten(node);
+						if(parent.type === 'AssignmentExpression' && parent.left === node) {
+							if(parent.operator === '=') {
+								let handled = handleSetter(node, name, keypath, property);
+								if(handled) {
+									magicString.overwrite(parent.start, parent.right.start, handled + '(');
+									magicString.appendLeft(parent.right.end, ')');
+									this.skip();
+									return;
+								}
+							}
+						} else {
+							let handled = handleReference(node, name, keypath, property);
+							if(handled) {
+								this.skip();
+								return;
+							}
 						}
 					}
 					if(node.type === 'MemberExpression' && !node.computed) {
@@ -283,7 +317,23 @@ function polyfill(options) {
 						if(callee.type === 'MemberExpression' && !callee.computed) {
 							let property = callee.property;
 							if(property.type === 'Identifier') {
-								handleMethod(node, callee, property, property.name);
+								handleMethod(node, callee, property.name);
+							}
+						}
+					} else if(node.type === 'AssignmentExpression') {
+						let left = node.left;
+						if(left.type === 'MemberExpression' && !left.computed) {
+							let property = left.property;
+							if(property.type === 'Identifier') {
+								if(node.operator === '=') {
+									let handled = handleSetter2(left, property.name);
+									if(handled) {
+										magicString.appendRight(left.start, `${scopeName}(`);
+										magicString.overwrite(left.object.end, node.right.start, ", ");
+										magicString.appendLeft(node.right.end, ')');
+										return;
+									}
+								}
 							}
 						}
 					}
@@ -294,7 +344,7 @@ function polyfill(options) {
 					}
 				}
 			});
-			if(changed) {
+			if(modified) {
 				magicString.appendLeft(0, `\n`);
 				return {
 					code: magicString.toString(),

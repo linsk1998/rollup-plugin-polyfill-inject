@@ -1,6 +1,9 @@
-import get_textContent from "@/utils/getNodeText";
-import { getCurrentScript as get_document_currentScript } from "sky-core/utils/getCurrentScript";
+import getInnerHeight from "@/utils/getInnerHeight";
+import getTextContent from "@/utils/getNodeText";
+import { getCurrentScript } from "sky-core/utils/getCurrentScript";
 
-var text = get_textContent(document.getElementById("foo"));
-
-var script = get_document_currentScript();
+console.log({ innerHeight: getInnerHeight() });
+var text = getTextContent(document.getElementById("foo"));
+var script = getCurrentScript();
+console.log(getTextContent(getTextContent({})));
+console.log(getTextContent(getTextContent(getTextContent({}))));

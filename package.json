@@ -6,7 +6,8 @@
 	"dependencies": {
 		"@rollup/pluginutils": "^4.1.1",
 		"estree-walker": "^2.0.0",
-		"magic-string": "^0.25.5"
+		"magic-string": "^0.25.5",
+		"pascalcase": "^1.0.0"
 	},
 	"devDependencies": {
 		"@rollup/plugin-commonjs": "^28.0.2",
