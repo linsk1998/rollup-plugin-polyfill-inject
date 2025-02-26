@@ -71,7 +71,7 @@ module.exports = {
 			pure: {
 				".padStart": "core-js-pure/actual/string/pad-start",
 				"Promise":"core-js-pure/actual/promise",
-				"Object.fromEntries":"core-js-pure/actual/object/from-entries",
+				"Object.fromEntries":"core-js-pure/actual/object/from-entries"
 			},
 			exclude: ["**/node_modules/core-js-pure/**"]
 		})
@@ -138,7 +138,7 @@ var script = document.currentScript;
 import getNodeText from "@/utils/getNodeText";
 import { getCurrentScript } from "sky-core/utils/getCurrentScript";
 
-var text = getElementText(document.getElementById("foo"));
+var text = getNodeText(document.getElementById("foo"));
 
 var script = getCurrentScript();
 ```

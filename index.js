@@ -79,6 +79,7 @@ function polyfill(options) {
 			var newImports = new Set();
 			var oldImports = new Set();
 			var pureImports = new Map();
+			var getterImports = new Map();
 			var imports = new Set();
 			ast.body.forEach(function(node) {
 				if(node.type === 'ImportDeclaration') {
@@ -97,13 +98,36 @@ function polyfill(options) {
 
 			function handleReference(node, name, keypath) {
 				if(!imports.has(name) && !scope.contains(name)) {
-					for(let path in pure) {
-						let mod = pure[path];
-						if(path === keypath) {
+					{
+						let mod = getter[keypath];
+						if(mod) {
+							let scopeName = getterImports.get(keypath);
+							if(!scopeName) {
+								let baseName = pluginutils.makeLegalIdentifier(`get_${keypath}`);
+								scopeName = baseName;
+								while(imports.has(scopeName) || scope.contains(scopeName)) {
+									scopeName = `${baseName}${scopeIndex}`;
+									scopeIndex++;
+								}
+								getterImports.set(keypath, scopeName);
+							}
+							if(Array.isArray(mod)) {
+								magicString.appendLeft(0, `import { ${mod[1]} as ${scopeName} } from ${JSON.stringify(mod[0])};\n`);
+							} else {
+								magicString.appendLeft(0, `import ${scopeName} from ${JSON.stringify(mod)};\n`);
+							}
+							magicString.overwrite(node.start, node.end, scopeName + '()', { storeName: true });
+							changed = true;
+							return true;
+						}
+					}
+					{
+						let mod = pure[keypath];
+						if(mod) {
 							let scopeName = pureImports.get(keypath);
 							if(!scopeName) {
 								if(name !== keypath || name == 'import') {
-									let baseName = pluginutils.makeLegalIdentifier(`$inject_${keypath}`);
+									let baseName = pluginutils.makeLegalIdentifier(keypath);
 									scopeName = baseName;
 									while(imports.has(scopeName) || scope.contains(scopeName)) {
 										scopeName = `${baseName}${scopeIndex}`;
@@ -113,9 +137,9 @@ function polyfill(options) {
 									scopeName = name;
 								}
 								if(Array.isArray(mod)) {
-									magicString.prepend(`import ${mod[1]} as ${scopeName} from ${JSON.stringify(mod[0])};\n`);
+									magicString.appendLeft(0, `import { ${mod[1]} as ${scopeName} } from ${JSON.stringify(mod[0])};\n`);
 								} else {
-									magicString.prepend(`import ${scopeName} from ${JSON.stringify(mod)};\n`);
+									magicString.appendLeft(0, `import ${scopeName} from ${JSON.stringify(mod)};\n`);
 								}
 								pureImports.set(keypath, scopeName);
 							}
@@ -126,13 +150,13 @@ function polyfill(options) {
 							return true;
 						}
 					}
-					for(let path in polluting) {
-						let mod = polluting[path];
-						if(path === keypath) {
+					{
+						let mod = polluting[keypath];
+						if(mod) {
 							if(!Array.isArray(mod)) mod = [mod];
 							mod.forEach(function(mod) {
 								if(!oldImports.has(mod) && !newImports.has(mod)) {
-									magicString.prepend(`import ${JSON.stringify(mod)};\n`);
+									magicString.appendLeft(0, `import ${JSON.stringify(mod)};\n`);
 									newImports.add(mod);
 								}
 							});
@@ -143,8 +167,78 @@ function polyfill(options) {
 				}
 				return false;
 			}
-			function handleMember(node) {
-
+			function handleMember(member, node, name) {
+				let key = '.' + name;
+				{
+					let mod = getter[key];
+					if(mod) {
+						let scopeName = getterImports.get(key);
+						if(!scopeName) {
+							let baseName = pluginutils.makeLegalIdentifier(`get_${name}`);
+							scopeName = baseName;
+							while(imports.has(scopeName) || scope.contains(scopeName)) {
+								scopeName = `${baseName}${scopeIndex}`;
+								scopeIndex++;
+							}
+							if(Array.isArray(mod)) {
+								magicString.appendLeft(0, `import { ${mod[1]} as ${scopeName} } from ${JSON.stringify(mod[0])};\n`);
+							} else {
+								magicString.appendLeft(0, `import ${scopeName} from ${JSON.stringify(mod)};\n`);
+							}
+							getterImports.set(key, scopeName);
+						}
+						magicString.appendRight(member.start, `${scopeName}(`);
+						magicString.overwrite(member.object.end, member.end, ")", { storeName: true });
+						changed = true;
+						return true;
+					}
+				}
+				{
+					let mod = polluting[key];
+					if(mod) {
+						if(!Array.isArray(mod)) mod = [mod];
+						mod.forEach(function(mod) {
+							if(!oldImports.has(mod) && !newImports.has(mod)) {
+								magicString.appendLeft(0, `import ${JSON.stringify(mod)};\n`);
+								newImports.add(mod);
+							}
+						});
+						changed = true;
+						return true;
+					}
+				}
+				return false;
+			}
+			function handleMethod(node, callee, property, name) {
+				let key = '.' + name;
+				let mod = pure[key];
+				if(mod) {
+					let scopeName = pureImports.get(key);
+					if(!scopeName) {
+						let baseName = pluginutils.makeLegalIdentifier(name);
+						scopeName = baseName;
+						while(imports.has(scopeName) || scope.contains(scopeName)) {
+							scopeName = `${baseName}${scopeIndex}`;
+							scopeIndex++;
+						}
+						if(Array.isArray(mod)) {
+							magicString.appendLeft(0, `import { ${mod[1]} as ${scopeName} } from ${JSON.stringify(mod[0])};\n`);
+						} else {
+							magicString.appendLeft(0, `import ${scopeName} from ${JSON.stringify(mod)};\n`);
+						}
+						pureImports.set(key, scopeName);
+					}
+					magicString.appendRight(node.start, `${scopeName}(`);
+					let args = node.arguments;
+					if(args.length) {
+						magicString.overwrite(callee.object.end, args[0].start, ", ", { storeName: true });
+					} else {
+						magicString.overwrite(callee.object.end, node.end, ")", { storeName: true });
+					}
+					changed = true;
+					return true;
+				}
+				return false;
 			}
 
 			estreeWalker.walk(ast, {
@@ -179,9 +273,18 @@ function polyfill(options) {
 							return;
 						}
 					}
-					if(node.type === 'Identifier') {
-						if(parent.type === 'MemberExpression' && !parent.computed && node === parent.object) {
-							handleMember(node);
+					if(node.type === 'MemberExpression' && !node.computed) {
+						let property = node.property;
+						if(property.type === 'Identifier') {
+							handleMember(node, property, property.name);
+						}
+					} else if(node.type === 'CallExpression') {
+						let callee = node.callee;
+						if(callee.type === 'MemberExpression' && !callee.computed) {
+							let property = callee.property;
+							if(property.type === 'Identifier') {
+								handleMethod(node, callee, property, property.name);
+							}
 						}
 					}
 				},
@@ -192,6 +295,7 @@ function polyfill(options) {
 				}
 			});
 			if(changed) {
+				magicString.appendLeft(0, `\n`);
 				return {
 					code: magicString.toString(),
 					map: sourceMap ? magicString.generateMap({ hires: true }) : null
