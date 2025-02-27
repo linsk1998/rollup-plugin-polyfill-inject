@@ -80,6 +80,7 @@ function polyfill(options) {
 			if(!ast) {
 				return null;
 			}
+			var context = this;
 			//console.log(JSON.stringify(ast, null, 1));
 			var newImports = new Set();
 			var oldImports = new Set();
@@ -87,6 +88,7 @@ function polyfill(options) {
 			var getterImports = new Map();
 			var setterImports = new Map();
 			var imports = new Set();
+			var globals = new Set();
 			ast.body.forEach(function(node) {
 				if(node.type === 'ImportDeclaration') {
 					node.specifiers.forEach(function(specifier) {
@@ -97,7 +99,8 @@ function polyfill(options) {
 				}
 			});
 			// analyse scopes
-			var scope = pluginutils.attachScopes(ast, 'scope');
+			var rootScope = pluginutils.attachScopes(ast, 'scope');
+			var scope = rootScope;
 			var magicString = new MagicString(code);
 			var modified = false;
 			var scopeIndex = 0;
@@ -114,69 +117,91 @@ function polyfill(options) {
 					magicString.appendLeft(0, `import ${scopeName} from ${JSON.stringify(mod)};\n`);
 				}
 			}
-			function generateUidIdentifier(scope, name) {
+			function scopeHas(name) {
+				return imports.has(name) || globals.has(name) || scope.contains(name);
+			}
+			function generateUidIdentifier(name) {
 				let baseName = pluginutils.makeLegalIdentifier(name);
-				scopeName = baseName;
-				while(imports.has(scopeName) || scope.contains(scopeName)) {
+				let scopeName = baseName;
+				while(scopeHas(scopeName)) {
 					scopeName = `${baseName}${scopeIndex}`;
 					scopeIndex++;
 				}
 				return scopeName;
 			}
-			function handleReference(node, name, keypath, property) {
-				if(!imports.has(name) && !scope.contains(name)) {
-					{
-						let mod = getter[keypath];
-						if(mod) {
-							let scopeName = getterImports.get(keypath);
-							if(!scopeName) {
-								scopeName = generateUidIdentifier(scope, `get${pascalcase(property)}`);
-								getterImports.set(keypath, scopeName);
-							}
+			function generateRootUidIdentifier(name) {
+				let baseName = pluginutils.makeLegalIdentifier(name);
+				let scopeName;
+				do {
+					scopeName = `${baseName}${scopeIndex}`;
+					scopeIndex++;
+				} while(scopeHas(scopeName));
+				globals.add(scopeName);
+				return scopeName;
+			}
+			function handleSetReference(node, name, keypath, property) {
+				let mod = setter[keypath];
+				if(mod) {
+					let scopeName = setterImports.get(keypath);
+					if(!scopeName) {
+						scopeName = generateUidIdentifier(`set${pascalcase(property)}`);
+						prependModule(scopeName, mod);
+						setterImports.set(keypath, scopeName);
+					}
+					modified = true;
+					return scopeName;
+				}
+			}
+			function handleGetReference(node, name, keypath, property) {
+				let mod = getter[keypath];
+				if(mod) {
+					let scopeName = getterImports.get(keypath);
+					if(!scopeName) {
+						scopeName = generateUidIdentifier(`get${pascalcase(property)}`);
+						prependModule(scopeName, mod);
+						getterImports.set(keypath, scopeName);
+					}
+					magicString.overwrite(node.start, node.end, scopeName + '()');
+					modified = true;
+					return scopeName;
+				}
+				return null;
+			}
+			function handleModuleReference(node, name, keypath, property) {
+				let mod = pure[keypath];
+				if(mod) {
+					modified = true;
+					if(name !== keypath || name == 'import') {
+						let scopeName = pureImports.get(keypath);
+						if(!scopeName) {
+							scopeName = generateUidIdentifier(property);
 							prependModule(scopeName, mod);
-							if(node.type === 'Property') {
-								magicString.appendRight(node.end, ': ' + scopeName + '()');
-							} else {
-								magicString.overwrite(node.start, node.end, scopeName + '()');
-							}
-							modified = true;
-							return true;
+							pureImports.set(keypath, scopeName);
 						}
-					}
-					{
-						let mod = pure[keypath];
-						if(mod) {
-							let scopeName = pureImports.get(keypath);
-							if(!scopeName) {
-								if(name !== keypath || name == 'import') {
-									scopeName = generateUidIdentifier(scope, property);
-								} else {
-									scopeName = name;
-								}
-								prependModule(scopeName, mod);
-								pureImports.set(keypath, scopeName);
-							}
-							if(name !== keypath) {
-								magicString.overwrite(node.start, node.end, scopeName, { storeName: true });
-							}
-							modified = true;
-							return true;
+						magicString.overwrite(node.start, node.end, scopeName, { storeName: true });
+						return scopeName;
+					} else {
+						if(!pureImports.get(keypath)) {
+							prependModule(name, mod);
+							pureImports.set(keypath, name);
 						}
+						return name;
 					}
-					{
-						let mod = polluting[keypath];
-						if(mod) {
-							if(!Array.isArray(mod)) mod = [mod];
-							mod.forEach(function(mod) {
-								if(!oldImports.has(mod) && !newImports.has(mod)) {
-									magicString.appendLeft(0, `import ${JSON.stringify(mod)};\n`);
-									newImports.add(mod);
-								}
-							});
-							modified = true;
-							return true;
+				}
+				return null;
+			}
+			function handlePollutingReference(keypath) {
+				let mod = polluting[keypath];
+				if(mod) {
+					if(!Array.isArray(mod)) mod = [mod];
+					mod.forEach(function(mod) {
+						if(!oldImports.has(mod) && !newImports.has(mod)) {
+							magicString.appendLeft(0, `import ${JSON.stringify(mod)};\n`);
+							newImports.add(mod);
 						}
-					}
+					});
+					modified = true;
+					return true;
 				}
 				return false;
 			}
@@ -187,7 +212,7 @@ function polyfill(options) {
 					if(mod) {
 						let scopeName = getterImports.get(key);
 						if(!scopeName) {
-							scopeName = generateUidIdentifier(scope, `get${pascalcase(name)}`);
+							scopeName = generateUidIdentifier(`get${pascalcase(name)}`);
 							prependModule(scopeName, mod);
 							getterImports.set(key, scopeName);
 						}
@@ -219,7 +244,7 @@ function polyfill(options) {
 				if(mod) {
 					let scopeName = pureImports.get(key);
 					if(!scopeName) {
-						scopeName = generateUidIdentifier(scope, name);
+						scopeName = generateUidIdentifier(name);
 						prependModule(scopeName, mod);
 						pureImports.set(key, scopeName);
 					}
@@ -235,26 +260,13 @@ function polyfill(options) {
 				}
 				return false;
 			}
-			function handleSetter(node, name, keypath, property) {
-				let mod = setter[keypath];
-				if(mod) {
-					let scopeName = setterImports.get(keypath);
-					if(!scopeName) {
-						scopeName = generateUidIdentifier(scope, `set${pascalcase(property)}`);
-						prependModule(scopeName, mod);
-						setterImports.set(keypath, scopeName);
-					}
-					modified = true;
-					return scopeName;
-				}
-			}
-			function handleSetter2(node, property) {
+			function handleSetter(node, property) {
 				let keypath = '.' + property;
 				let mod = setter[keypath];
 				if(mod) {
 					let scopeName = setterImports.get(keypath);
 					if(!scopeName) {
-						scopeName = generateUidIdentifier(scope, `set${pascalcase(property)}`);
+						scopeName = generateUidIdentifier(`set${pascalcase(property)}`);
 						prependModule(scopeName, mod);
 						setterImports.set(keypath, scopeName);
 					}
@@ -274,7 +286,7 @@ function polyfill(options) {
 						scope = node.scope; // eslint-disable-line prefer-destructuring
 					}
 					if(node.type === 'ImportExpression') {
-						handleReference(node, 'import', 'import', 'dynamicImport');
+						handleModuleReference(node, 'import', 'import', 'dynamicImport') || handlePollutingReference('import');
 						this.skip();
 						return;
 					}
@@ -283,27 +295,77 @@ function polyfill(options) {
 					if(node.type === 'Property' && node.shorthand) {
 						let ref = node.key;
 						let name = ref.name;
-						handleReference(node, name, name, name);
-						this.skip();
-						return;
+						if(!scopeHas(name)) {
+							let handled = handleGetReference(node, name, name, name);
+							if(handled) {
+								magicString.appendLeft(node.start, name + ': ');
+								this.skip();
+								return;
+							}
+							if(handleModuleReference(node, name, name, name) || handlePollutingReference(name)) {
+								this.skip();
+								return;
+							}
+						}
 					}
 					if(isReference(node, parent)) {
 						let { name, keypath, property } = flatten(node);
-						if(parent.type === 'AssignmentExpression' && parent.left === node) {
-							if(parent.operator === '=') {
-								let handled = handleSetter(node, name, keypath, property);
-								if(handled) {
-									magicString.overwrite(parent.start, parent.right.start, handled + '(');
-									magicString.appendLeft(parent.right.end, ')');
+						if(!scopeHas(name)) {
+							if(parent.type === 'AssignmentExpression' && parent.left === node) {
+								if(parent.operator === '=') {
+									let handled = handleSetReference(node, name, keypath, property);
+									if(handled) {
+										magicString.overwrite(parent.start, parent.right.start, handled + '(');
+										magicString.appendLeft(parent.right.end, ')');
+										this.skip();
+										return;
+									}
+								} else {
+									let set = handleSetReference(node, name, keypath, property);
+									if(set) {
+										let get = handleGetReference(node, name, keypath, property);
+										if(!get) {
+											const msg = `no getter found in '${keypath}'`;
+											context.error({ message: msg, id, pos: node.start });
+											throw new Error(msg);
+										}
+										let tmp = generateRootUidIdentifier('$');
+										magicString.overwrite(parent.start, parent.left.end, `(${tmp} = ${get}(), ${tmp}`);
+										magicString.prependRight(parent.right.end, `, ${set}(${tmp}), ${tmp})`);
+										this.skip();
+										return;
+									}
+								}
+							} else if(parent.type === 'UpdateExpression') {
+								let set = handleSetReference(node, name, keypath, property);
+								if(set) {
+									let get = handleGetReference(node, name, keypath, property);
+									if(!get) {
+										const msg = `no getter found in '${keypath}'`;
+										context.error({ message: msg, id, pos: node.start });
+										throw new Error(msg);
+									}
+									let tmp = generateRootUidIdentifier('$');
+									if(parent.prefix) {
+										magicString.prependLeft(parent.start, `(${tmp} = ${get}(), `);
+										magicString.overwrite(node.start, node.end, `${tmp}, ${set}(${tmp}), ${tmp})`);
+									} else {
+										let old = generateRootUidIdentifier('$');
+										magicString.overwrite(node.start, node.end, `(${old} = ${tmp} = ${get}(), ${tmp}`);
+										magicString.appendRight(parent.end, `, ${set}(${tmp}), ${old})`);
+									}
 									this.skip();
 									return;
 								}
-							}
-						} else {
-							let handled = handleReference(node, name, keypath, property);
-							if(handled) {
-								this.skip();
-								return;
+							} else {
+								if(
+									handleGetReference(node, name, keypath, property) ||
+									handleModuleReference(node, name, keypath, property) ||
+									handlePollutingReference(keypath)
+								) {
+									this.skip();
+									return;
+								}
 							}
 						}
 					}
@@ -326,9 +388,9 @@ function polyfill(options) {
 							let property = left.property;
 							if(property.type === 'Identifier') {
 								if(node.operator === '=') {
-									let handled = handleSetter2(left, property.name);
+									let handled = handleSetter(left, property.name);
 									if(handled) {
-										magicString.appendRight(left.start, `${scopeName}(`);
+										magicString.appendRight(left.start, `${handled}(`);
 										magicString.overwrite(left.object.end, node.right.start, ", ");
 										magicString.appendLeft(node.right.end, ')');
 										return;
@@ -345,6 +407,9 @@ function polyfill(options) {
 				}
 			});
 			if(modified) {
+				if(globals.size) {
+					magicString.appendLeft(0, `var ${Array.from(globals).join(', ')};\n`);
+				}
 				magicString.appendLeft(0, `\n`);
 				return {
 					code: magicString.toString(),
@@ -354,6 +419,6 @@ function polyfill(options) {
 
 		}
 	};
-}
+};
 polyfill.default = polyfill;
 module.exports = polyfill;

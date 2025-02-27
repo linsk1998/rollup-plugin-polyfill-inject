@@ -45,6 +45,10 @@ describe('rollup-plugin-polyfill-inject', function() {
 		}
 	}));
 	it('setter', () => test('setter', {
+		getter: {
+			// ".textContent": "@/utils/getNodeText",
+			"status": ["@/utils/jsBridge", 'getStatusText']
+		},
 		setter: {
 			".textContent": "@/utils/setNodeText",
 			"document.title": ["@/utils/jsBridge", 'setActivityTitle'],
