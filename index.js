@@ -88,7 +88,7 @@ function polyfill(options) {
 			var getterImports = new Map();
 			var setterImports = new Map();
 			var imports = new Set();
-			var globals = new Set();
+			var scopeDefs = new Map();
 			ast.body.forEach(function(node) {
 				if(node.type === 'ImportDeclaration') {
 					node.specifiers.forEach(function(specifier) {
@@ -99,8 +99,8 @@ function polyfill(options) {
 				}
 			});
 			// analyse scopes
-			var rootScope = pluginutils.attachScopes(ast, 'scope');
-			var scope = rootScope;
+			var scope = pluginutils.attachScopes(ast, 'scope');
+			var scopeNodeStack = [ast];
 			var magicString = new MagicString(code);
 			var modified = false;
 			var scopeIndex = 0;
@@ -118,9 +118,9 @@ function polyfill(options) {
 				}
 			}
 			function scopeHas(name) {
-				return imports.has(name) || globals.has(name) || scope.contains(name);
+				return imports.has(name) || scopeDefs.has(name) || scope.contains(name);
 			}
-			function generateUidIdentifier(name) {
+			function generateIdentifier(name) {
 				let baseName = pluginutils.makeLegalIdentifier(name);
 				let scopeName = baseName;
 				while(scopeHas(scopeName)) {
@@ -129,14 +129,14 @@ function polyfill(options) {
 				}
 				return scopeName;
 			}
-			function generateRootUidIdentifier(name) {
+			function addDeclaration(name) {
 				let baseName = pluginutils.makeLegalIdentifier(name);
 				let scopeName;
 				do {
 					scopeName = `${baseName}${scopeIndex}`;
 					scopeIndex++;
 				} while(scopeHas(scopeName));
-				globals.add(scopeName);
+				scopeDefs.set(scopeName, scopeNodeStack.at(-1));
 				return scopeName;
 			}
 			function handleSetReference(node, name, keypath, property) {
@@ -144,7 +144,7 @@ function polyfill(options) {
 				if(mod) {
 					let scopeName = setterImports.get(keypath);
 					if(!scopeName) {
-						scopeName = generateUidIdentifier(`set${pascalcase(property)}`);
+						scopeName = generateIdentifier(`set${pascalcase(property)}`);
 						prependModule(scopeName, mod);
 						setterImports.set(keypath, scopeName);
 					}
@@ -157,7 +157,7 @@ function polyfill(options) {
 				if(mod) {
 					let scopeName = getterImports.get(keypath);
 					if(!scopeName) {
-						scopeName = generateUidIdentifier(`get${pascalcase(property)}`);
+						scopeName = generateIdentifier(`get${pascalcase(property)}`);
 						prependModule(scopeName, mod);
 						getterImports.set(keypath, scopeName);
 					}
@@ -174,7 +174,7 @@ function polyfill(options) {
 					if(name !== keypath || name == 'import') {
 						let scopeName = pureImports.get(keypath);
 						if(!scopeName) {
-							scopeName = generateUidIdentifier(property);
+							scopeName = generateIdentifier(property);
 							prependModule(scopeName, mod);
 							pureImports.set(keypath, scopeName);
 						}
@@ -212,7 +212,7 @@ function polyfill(options) {
 					if(mod) {
 						let scopeName = getterImports.get(key);
 						if(!scopeName) {
-							scopeName = generateUidIdentifier(`get${pascalcase(name)}`);
+							scopeName = generateIdentifier(`get${pascalcase(name)}`);
 							prependModule(scopeName, mod);
 							getterImports.set(key, scopeName);
 						}
@@ -244,7 +244,7 @@ function polyfill(options) {
 				if(mod) {
 					let scopeName = pureImports.get(key);
 					if(!scopeName) {
-						scopeName = generateUidIdentifier(name);
+						scopeName = generateIdentifier(name);
 						prependModule(scopeName, mod);
 						pureImports.set(key, scopeName);
 					}
@@ -260,19 +260,35 @@ function polyfill(options) {
 				}
 				return false;
 			}
+			function handleGetter(node, property) {
+				let keypath = '.' + property;
+				let mod = getter[keypath];
+				if(mod) {
+					let scopeName = getterImports.get(keypath);
+					if(!scopeName) {
+						scopeName = generateIdentifier(`get${pascalcase(property)}`);
+						prependModule(scopeName, mod);
+						getterImports.set(keypath, scopeName);
+					}
+					modified = true;
+					return scopeName;
+				}
+				return null;
+			}
 			function handleSetter(node, property) {
 				let keypath = '.' + property;
 				let mod = setter[keypath];
 				if(mod) {
 					let scopeName = setterImports.get(keypath);
 					if(!scopeName) {
-						scopeName = generateUidIdentifier(`set${pascalcase(property)}`);
+						scopeName = generateIdentifier(`set${pascalcase(property)}`);
 						prependModule(scopeName, mod);
 						setterImports.set(keypath, scopeName);
 					}
 					modified = true;
 					return scopeName;
 				}
+				return null;
 			}
 
 			estreeWalker.walk(ast, {
@@ -284,6 +300,9 @@ function polyfill(options) {
 					}
 					if(node.scope) {
 						scope = node.scope; // eslint-disable-line prefer-destructuring
+					}
+					if(node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
+						scopeNodeStack.push(node.body);
 					}
 					if(node.type === 'ImportExpression') {
 						handleModuleReference(node, 'import', 'import', 'dynamicImport') || handlePollutingReference('import');
@@ -298,7 +317,7 @@ function polyfill(options) {
 						if(!scopeHas(name)) {
 							let handled = handleGetReference(node, name, name, name);
 							if(handled) {
-								magicString.appendLeft(node.start, name + ': ');
+								magicString.appendRight(node.start, name + ': ');
 								this.skip();
 								return;
 							}
@@ -316,7 +335,7 @@ function polyfill(options) {
 									let handled = handleSetReference(node, name, keypath, property);
 									if(handled) {
 										magicString.overwrite(parent.start, parent.right.start, handled + '(');
-										magicString.appendLeft(parent.right.end, ')');
+										magicString.prependLeft(parent.right.end, ')');
 										this.skip();
 										return;
 									}
@@ -329,9 +348,9 @@ function polyfill(options) {
 											context.error({ message: msg, id, pos: node.start });
 											throw new Error(msg);
 										}
-										let tmp = generateRootUidIdentifier('$');
+										let tmp = addDeclaration('$');
 										magicString.overwrite(parent.start, parent.left.end, `(${tmp} = ${get}(), ${tmp}`);
-										magicString.prependRight(parent.right.end, `, ${set}(${tmp}), ${tmp})`);
+										magicString.prependLeft(parent.right.end, `, ${set}(${tmp}), ${tmp})`);
 										this.skip();
 										return;
 									}
@@ -345,14 +364,14 @@ function polyfill(options) {
 										context.error({ message: msg, id, pos: node.start });
 										throw new Error(msg);
 									}
-									let tmp = generateRootUidIdentifier('$');
+									let tmp = addDeclaration('$');
 									if(parent.prefix) {
-										magicString.prependLeft(parent.start, `(${tmp} = ${get}(), `);
+										magicString.appendRight(parent.start, `(${tmp} = ${get}(), `);
 										magicString.overwrite(node.start, node.end, `${tmp}, ${set}(${tmp}), ${tmp})`);
 									} else {
-										let old = generateRootUidIdentifier('$');
+										let old = addDeclaration('$');
 										magicString.overwrite(node.start, node.end, `(${old} = ${tmp} = ${get}(), ${tmp}`);
-										magicString.appendRight(parent.end, `, ${set}(${tmp}), ${old})`);
+										magicString.prependLeft(parent.end, `, ${set}(${tmp}), ${old})`);
 									}
 									this.skip();
 									return;
@@ -372,7 +391,11 @@ function polyfill(options) {
 					if(node.type === 'MemberExpression' && !node.computed) {
 						let property = node.property;
 						if(property.type === 'Identifier') {
-							handleMember(node, property, property.name);
+							if(parent.type === 'AssignmentExpression' && parent.left === node) {
+							} else if(parent.type === 'UpdateExpression') {
+							} else {
+								handleMember(node, property, property.name);
+							}
 						}
 					} else if(node.type === 'CallExpression') {
 						let callee = node.callee;
@@ -387,14 +410,60 @@ function polyfill(options) {
 						if(left.type === 'MemberExpression' && !left.computed) {
 							let property = left.property;
 							if(property.type === 'Identifier') {
+								let object = left.object;
 								if(node.operator === '=') {
 									let handled = handleSetter(left, property.name);
 									if(handled) {
 										magicString.appendRight(left.start, `${handled}(`);
-										magicString.overwrite(left.object.end, node.right.start, ", ");
-										magicString.appendLeft(node.right.end, ')');
+										magicString.overwrite(object.end, node.right.start, ", ");
+										magicString.prependLeft(node.right.end, ')');
 										return;
 									}
+								} else {
+									let set = handleSetter(node, property.name);
+									if(set) {
+										let get = handleGetter(node, property.name);
+										if(!get) {
+											const msg = `no getter found in '.${property.name}'`;
+											context.error({ message: msg, id, pos: node.start });
+											throw new Error(msg);
+										}
+										let obj = addDeclaration('$');
+										let tmp = addDeclaration('$');
+										magicString.appendRight(node.start, `(${obj} = `);
+										magicString.overwrite(object.end, left.end, `, ${tmp} = ${get}(${obj}), ${tmp}`);
+										magicString.prependLeft(node.right.end, `, ${set}(${obj}, ${tmp}), ${tmp})`);
+										return;
+									}
+								}
+							}
+						}
+					} else if(node.type === 'UpdateExpression') {
+						let argument = node.argument;
+						if(argument.type === 'MemberExpression' && !argument.computed) {
+							let property = argument.property;
+							if(property.type === 'Identifier') {
+								let object = argument.object;
+								let set = handleSetter(node, property.name);
+								if(set) {
+									let get = handleGetter(node, property.name);
+									if(!get) {
+										const msg = `no getter found in '.${property.name}'`;
+										context.error({ message: msg, id, pos: node.start });
+										throw new Error(msg);
+									}
+									let obj = addDeclaration('$');
+									let tmp = addDeclaration('$');
+									if(parent.prefix) {
+										magicString.overwrite(node.start, object.start, `(${obj} = `);
+										magicString.overwrite(object.end, node.end, `, ${tmp} = ${get}(${obj}), ${node.operator}${tmp}, ${set}(${obj}, ${tmp}), ${tmp})`);
+									} else {
+										let old = addDeclaration('$');
+										magicString.appendRight(node.start, `(${obj} = `);
+										magicString.overwrite(object.end, argument.end, `, ${old} = ${tmp} = ${get}(${obj}), ${tmp}`);
+										magicString.prependLeft(node.end, `, ${set}(${obj}, ${tmp}), ${old})`);
+									}
+									return;
 								}
 							}
 						}
@@ -404,11 +473,25 @@ function polyfill(options) {
 					if(node.scope) {
 						scope = scope.parent;
 					}
+					if(scopeNodeStack.at(-1) === node.body) {
+						scopeNodeStack.pop();
+					}
 				}
 			});
 			if(modified) {
-				if(globals.size) {
-					magicString.appendLeft(0, `var ${Array.from(globals).join(', ')};\n`);
+				if(scopeDefs.size) {
+					let map = new Map();
+					scopeDefs.forEach((node, name) => {
+						let names = map.get(node);
+						if(!names) {
+							names = [];
+							map.set(node, names);
+						}
+						names.push(name);
+					});
+					map.forEach((names, node) => {
+						magicString.appendLeft(node.body.length ? node.body[0].start : 0, `var ${names.join(', ')};\n`);
+					});
 				}
 				magicString.appendLeft(0, `\n`);
 				return {
