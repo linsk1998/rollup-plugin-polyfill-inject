@@ -1,5 +1,9 @@
 # rollup-plugin-polyfill-inject
 
+[![npm version](https://img.shields.io/npm/v/rollup-plugin-polyfill-inject.svg)](https://www.npmjs.com/package/rollup-plugin-polyfill-inject)
+[![Build Status](https://github.com/linsk1998/rollup-plugin-polyfill-inject/workflows/CI/badge.svg)](https://github.com/linsk1998/rollup-plugin-polyfill-inject/actions)
+[![License](https://img.shields.io/npm/l/rollup-plugin-polyfill-inject.svg)](https://github.com/linsk1998/rollup-plugin-polyfill-inject/blob/main/LICENSE)
+
 auto inject polyfill
 
 ## polluting
