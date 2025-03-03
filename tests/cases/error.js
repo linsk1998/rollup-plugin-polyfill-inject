@@ -1,3 +1,8 @@
-var err = new Error("error");
-var err2 = new Error("error", { cause: 1 });
-var err2 = new Error(...args);
+new AggregateError([], "msg");
+new AggregateError([], "msg", { cause: 1 });
+new AggregateError(...args);
+new AggregateError([], ...args);
+
+new Error("error");
+new Error("error", { cause: 1 });
+new Error(...args);

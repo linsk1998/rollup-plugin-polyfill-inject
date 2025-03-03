@@ -422,7 +422,10 @@ function polyfill(options) {
 									}
 								} else if(parent.type === 'NewExpression') {
 									if(parent.callee === node) {
-										if(parent.arguments.length > 1 || parent.arguments.length === 1 && parent.arguments[0].type === 'SpreadElement') {
+										if(
+											parent.arguments.length > (name === 'AggregateError' ? 2 : 1) ||
+											parent.arguments.some(arg => arg.type === 'SpreadElement')
+										) {
 											let handled = handleErrorReference(node, name, keypath, property);
 											if(handled) {
 												this.skip();

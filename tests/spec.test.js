@@ -63,7 +63,8 @@ describe('rollup-plugin-polyfill-inject', function() {
 	}));
 	it('error', () => test('error', {
 		error: {
-			"Error": "sky-core/pure/Error"
+			"Error": "sky-core/pure/Error",
+			"AggregateError": "sky-core/pure/AggregateError"
 		}
 	}));
 });

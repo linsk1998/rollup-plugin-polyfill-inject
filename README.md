@@ -242,7 +242,8 @@ module.exports = {
 		commonjs(),
 		polyfill({
 			error: {
-				"Error": "sky-core/pure/Error"
+				"Error": "sky-core/pure/Error",
+				"AggregateError": "sky-core/pure/AggregateError"
 			}
 		})
 	]
@@ -254,13 +255,18 @@ module.exports = {
 ```javascript
 var err = new Error("error");
 var err2 = new Error("error", { cause: 1 });
+var err3 = new AggregateError([], "msg");
+var err4 = new AggregateError([], "msg", { cause: 1 });
 ```
 
 ### After
 
 ```javascript
 import CauseError from "sky-core/pure/Error";
+import CauseAggregateError from "sky-core/pure/AggregateError";
 
-var err = new Error("error");
-var err2 = new CauseError("error", { cause: 1 });
+new Error("error");
+new CauseError("error", { cause: 1 });
+new AggregateError([], "msg");
+new CauseAggregateError([], "msg", { cause: 1 });
 ```
