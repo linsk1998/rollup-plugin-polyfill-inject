@@ -222,3 +222,41 @@ var err = new Error("error");
 
 class MyError extends SuperError {}
 ```
+
+## error
+
+Inject error class when the create error object use cause option.
+
+```javascript
+const polyfill = require("rollup-plugin-polyfill-inject");
+const commonjs = require("@rollup/plugin-commonjs");
+const { nodeResolve } = require("@rollup/plugin-node-resolve");
+
+module.exports = {
+	plugins: [
+		nodeResolve(),
+		commonjs(),
+		polyfill({
+			error: {
+				"Error": "sky-core/pure/Error"
+			}
+		})
+	]
+}
+```
+
+### Before
+
+```javascript
+var err = new Error("error");
+var err2 = new Error("error", { cause: 1 });
+```
+
+### After
+
+```javascript
+import CauseError from "sky-core/pure/Error";
+
+var err = new Error("error");
+var err2 = new CauseError("error", { cause: 1 });
+```

@@ -57,6 +57,7 @@ function polyfill(options) {
 		pure = {},
 		getter = {},
 		setter = {},
+		error = {},
 		exclude,
 		include
 	} = options;
@@ -89,6 +90,7 @@ function polyfill(options) {
 			var getterImports = new Map();
 			var setterImports = new Map();
 			var superImports = new Map();
+			var errorImports = new Map();
 			var imports = new Set();
 			var scopeDefs = new Map();
 			ast.body.forEach(function(node) {
@@ -140,6 +142,21 @@ function polyfill(options) {
 				} while(scopeHas(scopeName));
 				scopeDefs.set(scopeName, scopeNodeStack.at(-1));
 				return scopeName;
+			}
+			function handleErrorReference(node, name, keypath, property) {
+				let mod = error[keypath];
+				if(mod) {
+					let scopeName = errorImports.get(keypath);
+					if(!scopeName) {
+						scopeName = generateIdentifier(`Cause${property}`);
+						prependModule(scopeName, mod);
+						errorImports.set(keypath, scopeName);
+					}
+					magicString.overwrite(node.start, node.end, scopeName);
+					modified = true;
+					return true;
+				}
+				return false;
 			}
 			function handleSuperReference(node, name, keypath, property) {
 				let mod = Super[keypath];
@@ -401,6 +418,16 @@ function polyfill(options) {
 										if(handled) {
 											this.skip();
 											return;
+										}
+									}
+								} else if(parent.type === 'NewExpression') {
+									if(parent.callee === node) {
+										if(parent.arguments.length > 1 || parent.arguments.length === 1 && parent.arguments[0].type === 'SpreadElement') {
+											let handled = handleErrorReference(node, name, keypath, property);
+											if(handled) {
+												this.skip();
+												return;
+											}
 										}
 									}
 								}
