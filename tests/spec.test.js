@@ -55,4 +55,10 @@ describe('rollup-plugin-polyfill-inject', function() {
 			"status": ["@/utils/jsBridge", 'setStatusText']
 		}
 	}));
+	it('super', () => test('super', {
+		super: {
+			"Error": "sky-core/pure/Error",
+			"TypeError": "sky-core/pure/TypeError"
+		}
+	}));
 });

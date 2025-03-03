@@ -182,3 +182,43 @@ setNodeText(document.getElementById("foo"), "bar");
 
 setActivityTitle("New Title");
 ```
+
+## super
+
+Inject class when the class is super.
+
+```javascript
+const polyfill = require("rollup-plugin-polyfill-inject");
+const commonjs = require("@rollup/plugin-commonjs");
+const { nodeResolve } = require("@rollup/plugin-node-resolve");
+
+module.exports = {
+	plugins: [
+		nodeResolve(),
+		commonjs(),
+		polyfill({
+			super: {
+				"Error": "sky-core/pure/Error"
+			}
+		})
+	]
+}
+```
+
+### Before
+
+```javascript
+var err = new Error("error");
+
+class MyError extends Error {}
+```
+
+### After
+
+```javascript
+import SuperError from "sky-core/pure/Error";
+
+var err = new Error("error");
+
+class MyError extends SuperError {}
+```

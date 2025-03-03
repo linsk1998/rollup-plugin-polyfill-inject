@@ -60,6 +60,7 @@ function polyfill(options) {
 		exclude,
 		include
 	} = options;
+	const Super = options.super || {};
 
 	const filter = options.filter || pluginutils.createFilter(include, exclude);
 	const sourceMap = options.sourceMap !== false && options.sourcemap !== false;
@@ -87,6 +88,7 @@ function polyfill(options) {
 			var pureImports = new Map();
 			var getterImports = new Map();
 			var setterImports = new Map();
+			var superImports = new Map();
 			var imports = new Set();
 			var scopeDefs = new Map();
 			ast.body.forEach(function(node) {
@@ -139,6 +141,21 @@ function polyfill(options) {
 				scopeDefs.set(scopeName, scopeNodeStack.at(-1));
 				return scopeName;
 			}
+			function handleSuperReference(node, name, keypath, property) {
+				let mod = Super[keypath];
+				if(mod) {
+					let scopeName = superImports.get(keypath);
+					if(!scopeName) {
+						scopeName = generateIdentifier(`Super${property}`);
+						prependModule(scopeName, mod);
+						superImports.set(keypath, scopeName);
+					}
+					magicString.overwrite(node.start, node.end, scopeName);
+					modified = true;
+					return true;
+				}
+				return false;
+			}
 			function handleSetReference(node, name, keypath, property) {
 				let mod = setter[keypath];
 				if(mod) {
@@ -151,6 +168,7 @@ function polyfill(options) {
 					modified = true;
 					return scopeName;
 				}
+				return null;
 			}
 			function handleGetReference(node, name, keypath, property) {
 				let mod = getter[keypath];
@@ -377,6 +395,15 @@ function polyfill(options) {
 									return;
 								}
 							} else {
+								if(parent.type === 'ClassDeclaration' || parent.type === 'ClassExpression') {
+									if(parent.superClass === node) {
+										let handled = handleSuperReference(node, name, keypath, property);
+										if(handled) {
+											this.skip();
+											return;
+										}
+									}
+								}
 								if(
 									handleGetReference(node, name, keypath, property) ||
 									handleModuleReference(node, name, keypath, property) ||
