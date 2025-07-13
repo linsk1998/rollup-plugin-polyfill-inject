@@ -206,7 +206,7 @@ function polyfill(options) {
 				let mod = pure[keypath];
 				if(mod) {
 					modified = true;
-					if(name !== keypath || name == 'import') {
+					if(name == 'import') {
 						let scopeName = pureImports.get(keypath);
 						if(!scopeName) {
 							scopeName = generateIdentifier(property);
@@ -216,11 +216,14 @@ function polyfill(options) {
 						magicString.overwrite(node.start, node.end, scopeName, { storeName: true });
 						return scopeName;
 					} else {
-						if(!pureImports.get(keypath)) {
-							prependModule(name, mod);
-							pureImports.set(keypath, name);
+						let scopeName = pureImports.get(keypath);
+						if(!scopeName) {
+							scopeName = generateIdentifier(`pure${pascalcase(property)}`);
+							prependModule(scopeName, mod);
+							pureImports.set(keypath, scopeName);
 						}
-						return name;
+						magicString.overwrite(node.start, node.end, scopeName, { storeName: true });
+						return scopeName;
 					}
 				}
 				return null;
@@ -340,7 +343,13 @@ function polyfill(options) {
 						scopeNodeStack.push(node.body);
 					}
 					if(node.type === 'ImportExpression') {
-						handleModuleReference(node, 'import', 'import', 'dynamicImport') || handlePollutingReference('import');
+						let handled = handleModuleReference(node, 'import', 'import', 'dynamicImport');
+						if(handled) {
+							magicString.overwrite(node.start, node.source.start, handled + '(');
+							this.skip();
+							return;
+						}
+						handlePollutingReference('import');
 						this.skip();
 						return;
 					}
@@ -356,7 +365,13 @@ function polyfill(options) {
 								this.skip();
 								return;
 							}
-							if(handleModuleReference(node, name, name, name) || handlePollutingReference(name)) {
+							handled = handleModuleReference(node, name, name, name);
+							if(handled) {
+								magicString.appendRight(node.start, name + ': ');
+								this.skip();
+								return;
+							}
+							if(handlePollutingReference(name)) {
 								this.skip();
 								return;
 							}
@@ -434,11 +449,16 @@ function polyfill(options) {
 										}
 									}
 								}
-								if(
-									handleGetReference(node, name, keypath, property) ||
-									handleModuleReference(node, name, keypath, property) ||
-									handlePollutingReference(keypath)
-								) {
+								if(!(parent.type === 'UnaryExpression' && parent.operator === 'typeof')) {
+									if(
+										handleGetReference(node, name, keypath, property) ||
+										handleModuleReference(node, name, keypath, property)
+									) {
+										this.skip();
+										return;
+									}
+								}
+								if(handlePollutingReference(keypath)) {
 									this.skip();
 									return;
 								}

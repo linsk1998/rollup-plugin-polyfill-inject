@@ -1,3 +1,7 @@
+console.log(typeof Promise);
+console.log(typeof Object.fromEntries);
+console.log(typeof "abc".padStart);
+
 "abc".padStart(5, "0");
 " bc".trimStart();
 
