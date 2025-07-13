@@ -270,3 +270,50 @@ new CauseError("error", { cause: 1 });
 new AggregateError([], "msg");
 new CauseAggregateError([], "msg", { cause: 1 });
 ```
+
+## Timer
+
+Inject call timer function when the user parameters for callback.
+
+```javascript
+const polyfill = require("rollup-plugin-polyfill-inject");
+const commonjs = require("@rollup/plugin-commonjs");
+const { nodeResolve } = require("@rollup/plugin-node-resolve");
+
+module.exports = {
+	plugins: [
+		nodeResolve(),
+		commonjs(),
+		polyfill({
+			timer: {
+				"setTimeout": "sky-core/pure/setTimeout",
+				"setInterval": "sky-core/pure/setInterval"
+			}
+		})
+	]
+}
+```
+
+### Before
+
+```javascript
+let args = [0, 1, 2];
+setTimeout(function() { }, 0);
+setTimeout(function() { });
+setTimeout(function() { }, ...args);
+setTimeout.apply(window, args);
+console.log(setTimeout);
+```
+
+### After
+
+```javascript
+import argsSetTimeout from "sky-core/pure/setTimeout";
+
+let args = [0, 1, 2];
+setTimeout(function() { }, 0);
+setTimeout(function() { });
+argsSetTimeout(function() { }, ...args);
+argsSetTimeout.apply(window, args);
+console.log(argsSetTimeout);
+```

@@ -58,6 +58,7 @@ function polyfill(options) {
 		getter = {},
 		setter = {},
 		error = {},
+		timer = {},
 		exclude,
 		include
 	} = options;
@@ -91,6 +92,7 @@ function polyfill(options) {
 			var setterImports = new Map();
 			var superImports = new Map();
 			var errorImports = new Map();
+			var timerImports = new Map();
 			var imports = new Set();
 			var scopeDefs = new Map();
 			ast.body.forEach(function(node) {
@@ -166,6 +168,21 @@ function polyfill(options) {
 						scopeName = generateIdentifier(`Super${property}`);
 						prependModule(scopeName, mod);
 						superImports.set(keypath, scopeName);
+					}
+					magicString.overwrite(node.start, node.end, scopeName);
+					modified = true;
+					return true;
+				}
+				return false;
+			}
+			function handleTimerReference(node, name, keypath, property) {
+				let mod = timer[keypath];
+				if(mod) {
+					let scopeName = timerImports.get(keypath);
+					if(!scopeName) {
+						scopeName = generateIdentifier(`args${pascalcase(property)}`);
+						prependModule(scopeName, mod);
+						timerImports.set(keypath, scopeName);
 					}
 					magicString.overwrite(node.start, node.end, scopeName);
 					modified = true;
@@ -459,6 +476,20 @@ function polyfill(options) {
 									}
 								}
 								if(handlePollutingReference(keypath)) {
+									this.skip();
+									return;
+								}
+								if(parent.type === 'CallExpression') {
+									if(parent.callee === node) {
+										if(
+											parent.arguments.length <= 2 &&
+											!parent.arguments.some(arg => arg.type === 'SpreadElement')
+										) {
+											return;
+										}
+									}
+								}
+								if(handleTimerReference(node, name, keypath, property)) {
 									this.skip();
 									return;
 								}

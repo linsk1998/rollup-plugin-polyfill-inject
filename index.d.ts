@@ -1,8 +1,11 @@
 interface PolyfillOptions {
 	polluting?: Record<string, string | string[]>,
 	pure?: Record<string, string | string[]>,
-	getter?: Record<string, string>,
-	setter?: Record<string, string>,
+	getter?: Record<string, string | string[]>,
+	setter?: Record<string, string | string[]>,
+	error?: Record<string, string | string[]>,
+	super?: Record<string, string | string[]>,
+	timer?: Record<string, string | string[]>,
 	filter?: (id: string) => boolean;
 	include?: Array<string | RegExp> | string | RegExp;
 	exclude?: Array<string | RegExp> | string | RegExp;
