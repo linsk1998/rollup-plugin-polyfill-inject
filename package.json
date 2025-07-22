@@ -1,6 +1,6 @@
 {
 	"name": "rollup-plugin-polyfill-inject",
-	"version": "3.1.0",
+	"version": "3.2.0",
 	"description": "auto inject polyfill",
 	"keywords": [
 		"rollup",
@@ -21,7 +21,8 @@
 		"registry": "https://registry.npmjs.org/"
 	},
 	"scripts": {
-		"test": "jest tests/spec.test.js"
+		"test": "jest tests/spec.test.js",
+		"prepublishOnly": "npm run test"
 	},
 	"dependencies": {
 		"@rollup/pluginutils": "^4.1.1",

@@ -34,7 +34,9 @@ describe('rollup-plugin-polyfill-inject', function() {
 			".padStart": "core-js-pure/actual/string/pad-start",
 			".trimStart": "core-js-pure/actual/string/trim-start",
 			"Promise": "core-js-pure/actual/promise",
-			"Object.fromEntries": "core-js-pure/actual/object/from-entries"
+			"Object.fromEntries": "core-js-pure/actual/object/from-entries",
+			"Symbol": "sky-core/pure/Symbol",
+			"Symbol.iterator": "sky-core/pure/Symbol/iterator",
 		}
 	}));
 	it('getter', () => test('getter', {

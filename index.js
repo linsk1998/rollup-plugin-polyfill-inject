@@ -467,12 +467,19 @@ function polyfill(options) {
 									}
 								}
 								if(!(parent.type === 'UnaryExpression' && parent.operator === 'typeof')) {
-									if(
-										handleGetReference(node, name, keypath, property) ||
-										handleModuleReference(node, name, keypath, property)
-									) {
+									if(handleGetReference(node, name, keypath, property)) {
 										this.skip();
 										return;
+									}
+									if(node.type !== "MemberExpression" || !(
+										parent.type === 'IfStatement' && parent.test === node ||
+										parent.type === 'ConditionalExpression' && parent.test === node ||
+										parent.type === 'LogicalExpression' && parent.left === node && ["||", "&&"].includes(parent.operator)
+									)) {
+										if(handleModuleReference(node, name, keypath, property)) {
+											this.skip();
+											return;
+										}
 									}
 								}
 								if(handlePollutingReference(keypath)) {
